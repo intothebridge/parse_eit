@@ -10,6 +10,8 @@
 
   Probleme:
     - den Text muss man escapen, da auch " darin vorkommt, siehe Schneewelt1.eit
+  
+  20251120 Modifications by geargineer - see https://github.com/intothebridge/parse_eit/blob/master/README.md
 
 */
 
@@ -370,6 +372,8 @@ void dump_text (uint8_t *p, size_t len, char append)
 
 int main (int argc, char *argv[])
 {
+  // geargineer: counter fuer die short events eingefuehrt, um diese im json unterscheiden zu koennen
+  int shortevent_count = 0;
   if (argc < 2)
     {
       fprintf (stderr, "ERROR: No input file...\n\nUSAGE: %s EIT\n", argv[0]);
@@ -385,6 +389,7 @@ int main (int argc, char *argv[])
   for (int k = 1; k < argc; ++k)
     {
       const char *fn = argv[k];
+      // print opening bracket
       printf (" {\n");
 
       printf ("  \"filename\": \"%s\",\n", fn);
@@ -462,7 +467,8 @@ int main (int argc, char *argv[])
           // Seite 87, Kapitel 6.2.37 : Short event descriptor
           if (descriptor_tag == SHORT_EVENT_DESCRIPTOR)
             {
-              printf ("  \"short_event_descriptor\":\n  {\n");
+              shortevent_count += 1;
+              printf ("  \"short_event_descriptor_%i\":\n  {\n", shortevent_count);
               printf ("    \"iso_639_2_language_code\": \"%c%c%c\",\n", p[0], p[1], p[2]);
 
               p += 3;
@@ -471,6 +477,7 @@ int main (int argc, char *argv[])
               //printf ("    \"event_name_length\": %i,\n", event_name_length);
               p += 1;
 
+              // printf ("    \"event_name_%i\": \"", shortevent_count);
               printf ("    \"event_name\": \"");
               dump_text (p, event_name_length, 0);
               printf ("\",\n");
@@ -483,6 +490,8 @@ int main (int argc, char *argv[])
 
               printf ("    \"text\": \"");
               dump_text (p, text_length, 0);
+              // Change! 20251120 - if program exits AFTER this descriptor, the comma in printf makes the json invalid --> removed
+//              printf ("\"\n  },\n");
               printf ("\"\n  },\n");
               p += text_length;
             }
@@ -504,6 +513,8 @@ int main (int argc, char *argv[])
                 {
                   printf ("  \"extended_event_descriptor\":\n  {\n");
                   printf ("    \"iso_639_2_language_code\": \"%c%c%c\",\n", p[0], p[1], p[2]);
+                  // IWi 20251107: um den text im extended descriptor zu identifizieren den key von 'text' auf 'text_extended' gesetzt
+                  // printf ("    \"text_extended\": \"");
                   printf ("    \"text\": \"");
                 }
 
@@ -526,7 +537,8 @@ int main (int argc, char *argv[])
 
               // Sind wir am Ende?
               if (descriptor_number == last_descriptor_number)
-                printf ("\"\n  }\n");
+                // geargineer 20251120 added comma to terminate json-structure before next structure
+                printf ("\"\n  },\n");
 
               p += text_length;
             }
@@ -566,6 +578,14 @@ int main (int argc, char *argv[])
               if (bytes_left > 0)
                 {
                   fprintf (stderr, "Unbekannter descriptor_tag %#x, descriptor_length=%i, bytes left = %i\n", descriptor_tag, descriptor_length, bytes_left);
+                  //print emtpy structure to get valid json befor exiting
+                  printf ("  \"empty_structure\":\n");
+                  printf ("  {\n");
+                  printf ("    \"dummy\": \"nix\" \n");
+                  printf ("  }\n");
+
+                  // print closing bracket for valid json
+                  printf (" }\n");
                   exit (-1);
                 }
             }
@@ -577,6 +597,12 @@ int main (int argc, char *argv[])
 #ifdef DEBUG
       printf ("End: Bytes left: %li\n", buf + num - p);
 #endif
+      // regular termination of program:
+      printf ("  \"empty_structure\":\n");
+      printf ("  {\n");
+      printf ("    \"dummy\": \"nix\" \n");
+      printf ("  }\n");
+
       printf (" }%s\n", (k < argc - 1)? "," : "");
     }
   if (num_files > 1)
